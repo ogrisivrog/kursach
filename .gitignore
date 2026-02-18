@@ -1,0 +1,57 @@
+################################
+# ОС и редакторы
+################################
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+.vscode/
+.idea/
+*.code-workspace
+
+################################
+# Python
+################################
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+cov.xml
+
+*.log
+
+################################
+# Виртуальные окружения
+################################
+venv/
+env/
+.venv/
+.envrc
+
+################################
+# Docker / Compose
+################################
+*.pid
+docker-compose.override.yml
+
+################################
+# Конфиденциальные файлы и окружение
+################################
+.env
+.env.*
+!*.env.example
+
+################################
+# Данные
+################################
+data/raw/
+data/processed/
+!data/processed/requirements_template.csv
+

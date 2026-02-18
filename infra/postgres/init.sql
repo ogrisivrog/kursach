@@ -1,0 +1,3 @@
+-- You can add extensions here later (pgvector, uuid-ossp, etc.)
+-- Example:
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
