@@ -40,3 +40,21 @@ class Requirement(Base):
 
     item_name = Column(String, nullable=False, index=True)
     qty_required = Column(Integer, nullable=False, default=0)
+
+
+class SoftwareRequirement(Base):
+    __tablename__ = "software_requirements"
+
+    id = Column(Integer, primary_key=True)
+    software_name = Column(String, nullable=False)
+    seats_required = Column(Integer, nullable=False)
+    discipline = Column(String, nullable=False)
+    lab = Column(String, nullable=False)
+
+class SoftwareInventory(Base):
+    __tablename__ = "software_inventory"
+
+    id = Column(Integer, primary_key=True)
+    software_name = Column(String, nullable=False)
+    seats_available = Column(Integer, nullable=False)
+    location = Column(String, nullable=False)

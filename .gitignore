@@ -47,11 +47,3 @@ docker-compose.override.yml
 .env
 .env.*
 !*.env.example
-
-################################
-# Данные
-################################
-data/raw/
-data/processed/
-!data/processed/requirements_template.csv
-

@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import io
+import csv
 from pathlib import Path
 from typing import Optional, Literal
-
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from .normalize_software import canonicalize_software
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 
 from .db import engine, get_db
-from .models import Base, Item, Location, Inventory, Requirement
-from .ingest import ingest_inventory_df
+from .models import Base, Item, Location, Inventory, Requirement, SoftwareInventory, SoftwareRequirement
+from .ingest import ingest_inventory_df, ingest_software_inventory_df, ingest_software_requirements_df
 from .ingest_requirements import ingest_requirements_df
 
 app = FastAPI(title="MTO Minimal API")
@@ -205,14 +207,21 @@ def requirements_summary(
 @app.get("/calc/coverage")
 def calc_coverage(
     only_deficit: bool = Query(True),
+    mode: str = Query("sum"),  # "sum" | "max_per_lab"
     db: Session = Depends(get_db),
 ):
-    """
-    Минимальная версия: сопоставляем требования и наличие ПО ТОЧНОМУ item_name.
-    Если названия отличаются ("ПК" vs "Персональный компьютер") — будет показывать дефицит.
-    Позже добавим синонимы/нормализацию.
-    """
-    inv = (
+    try:
+        from .normalize_items import load_synonyms, canonicalize
+        syn = load_synonyms()
+        def canon(x: str) -> str:
+            return canonicalize(x, syn)
+    except Exception:
+        syn = {}
+        def canon(x: str) -> str:
+            return str(x).strip()
+
+    # --- inventory: сколько есть (по всем локациям) ---
+    inv_rows = (
         db.query(
             Item.name.label("item_name"),
             func.sum(Inventory.qty_available).label("qty_available"),
@@ -221,21 +230,50 @@ def calc_coverage(
         .group_by(Item.name)
         .all()
     )
-    inv_map = {r.item_name: int(r.qty_available or 0) for r in inv}
 
-    req = (
-        db.query(
-            Requirement.item_name.label("item_name"),
-            func.sum(Requirement.qty_required).label("qty_required"),
+    inv_map: dict[str, int] = {}
+    for r in inv_rows:
+        c = canon(r.item_name)
+        inv_map[c] = inv_map.get(c, 0) + int(r.qty_available or 0)
+
+    # --- requirements: сколько надо ---
+    req_map: dict[str, int] = {}
+
+    if mode == "sum":
+        req_rows = (
+            db.query(
+                Requirement.item_name.label("item_name"),
+                func.sum(Requirement.qty_required).label("qty_required"),
+            )
+            .group_by(Requirement.item_name)
+            .all()
         )
-        .group_by(Requirement.item_name)
-        .all()
-    )
+        for r in req_rows:
+            c = canon(r.item_name)
+            req_map[c] = req_map.get(c, 0) + int(r.qty_required or 0)
 
+    elif mode == "max_per_lab":
+        # Берём MAX по каждой лаборатории для каждой позиции
+        req_rows = (
+            db.query(
+                Requirement.lab.label("lab"),
+                Requirement.item_name.label("item_name"),
+                func.max(Requirement.qty_required).label("qty_required"),
+            )
+            .group_by(Requirement.lab, Requirement.item_name)
+            .all()
+        )
+        # Потом суммируем по lab’ам (разные lab → разные комплекты оборудования)
+        for r in req_rows:
+            c = canon(r.item_name)
+            req_map[c] = req_map.get(c, 0) + int(r.qty_required or 0)
+
+    else:
+        raise HTTPException(status_code=400, detail="mode must be 'sum' or 'max_per_lab'")
+
+    # --- собираем результат ---
     rows = []
-    for r in req:
-        item_name = r.item_name
-        qty_required = int(r.qty_required or 0)
+    for item_name, qty_required in req_map.items():
         qty_available = inv_map.get(item_name, 0)
         deficit = max(0, qty_required - qty_available)
         if only_deficit and deficit == 0:
@@ -250,7 +288,8 @@ def calc_coverage(
         )
 
     rows.sort(key=lambda x: (-x["deficit"], x["item_name"]))
-    return {"only_deficit": only_deficit, "rows": rows}
+    return {"only_deficit": only_deficit, "mode": mode, "rows": rows}
+
 
 @app.get("/stats")
 def stats(db: Session = Depends(get_db)):
@@ -268,3 +307,153 @@ def stats(db: Session = Depends(get_db)):
         "requirements_rows": int(req_rows),
         "requirements_sum": int(req_sum),
     }
+
+
+@app.get("/reports/procurement.csv")
+def report_procurement_csv(
+    mode: str = Query("max_per_lab"),          # "sum" | "max_per_lab"
+    only_deficit: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    # Используем уже готовую логику расчёта (тот же JSON, только в CSV)
+    result = calc_coverage(only_deficit=only_deficit, mode=mode, db=db)
+    rows = result["rows"]
+
+    buf = io.StringIO()
+    # BOM для Excel на Windows
+    buf.write("\ufeff")
+
+    writer = csv.writer(buf)
+    writer.writerow(["item_name", "qty_required", "qty_available", "deficit", "mode"])
+    for r in rows:
+        writer.writerow([
+            r["item_name"],
+            r["qty_required"],
+            r["qty_available"],
+            r["deficit"],
+            mode,
+        ])
+
+    data = buf.getvalue()
+    headers = {
+        "Content-Disposition": 'attachment; filename="procurement_plan.csv"'
+    }
+    return StreamingResponse(iter([data]), media_type="text/csv; charset=utf-8", headers=headers)
+
+
+@app.post("/import/software-inventory-from-path")
+def import_software_inventory_from_path(
+    rel_path: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    path = Path("/app/data") / rel_path
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    result = ingest_software_inventory_df(db, df)
+    db.commit()
+    return {"ok": True, "path": rel_path, **result}
+
+
+@app.post("/import/software-requirements-from-path")
+def import_software_requirements_from_path(
+    rel_path: str = Query(...),
+    replace: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    path = Path("/app/data") / rel_path
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    result = ingest_software_requirements_df(db, df, replace=replace)
+    db.commit()
+    return {"ok": True, "path": rel_path, **result}
+
+
+@app.get("/calc/software-coverage")
+def calc_software_coverage(
+    only_deficit: bool = Query(True),
+    mode: str = Query("max_per_lab"),  # "sum" | "max_per_lab"
+    db: Session = Depends(get_db),
+):
+    # inventory: суммарно по всем локациям
+    inv_rows = (
+        db.query(
+            SoftwareInventory.software_name.label("software_name"),
+            func.sum(SoftwareInventory.seats_available).label("seats_available"),
+        )
+        .group_by(SoftwareInventory.software_name)
+        .all()
+    )
+    inv_map = {r.software_name: int(r.seats_available or 0) for r in inv_rows}
+
+    req_map = {}
+
+    if mode == "sum":
+        req_rows = (
+            db.query(
+                SoftwareRequirement.software_name.label("software_name"),
+                func.sum(SoftwareRequirement.seats_required).label("seats_required"),
+            )
+            .group_by(SoftwareRequirement.software_name)
+            .all()
+        )
+        for r in req_rows:
+            req_map[r.software_name] = int(r.seats_required or 0)
+
+    elif mode == "max_per_lab":
+        req_rows = (
+            db.query(
+                SoftwareRequirement.lab.label("lab"),
+                SoftwareRequirement.software_name.label("software_name"),
+                func.max(SoftwareRequirement.seats_required).label("seats_required"),
+            )
+            .group_by(SoftwareRequirement.lab, SoftwareRequirement.software_name)
+            .all()
+        )
+        # суммируем по лабораториям (каждая лаба требует свой комплект ПО)
+        for r in req_rows:
+            req_map[r.software_name] = req_map.get(r.software_name, 0) + int(r.seats_required or 0)
+    else:
+        return {"ok": False, "error": "mode must be 'sum' or 'max_per_lab'"}
+
+    rows = []
+    for sw, need in req_map.items():
+        have = inv_map.get(sw, 0)
+        deficit = max(0, need - have)
+        if only_deficit and deficit == 0:
+            continue
+        rows.append({
+            "software_name": sw,
+            "seats_required": need,
+            "seats_available": have,
+            "deficit": deficit,
+        })
+
+    rows.sort(key=lambda x: (-x["deficit"], x["software_name"]))
+    return {"only_deficit": only_deficit, "mode": mode, "rows": rows}
+
+
+@app.get("/reports/software_coverage.csv")
+def report_software_coverage_csv(
+    mode: str = Query("max_per_lab"),          # "sum" | "max_per_lab"
+    only_deficit: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    result = calc_software_coverage(only_deficit=only_deficit, mode=mode, db=db)
+    rows = result["rows"]
+
+    buf = io.StringIO()
+    # BOM чтобы Excel на Windows нормально открыл UTF-8
+    buf.write("\ufeff")
+
+    w = csv.writer(buf)
+    w.writerow(["software_name", "seats_required", "seats_available", "deficit", "mode"])
+    for r in rows:
+        w.writerow([
+            r["software_name"],
+            r["seats_required"],
+            r["seats_available"],
+            r["deficit"],
+            mode,
+        ])
+
+    data = buf.getvalue()
+    headers = {"Content-Disposition": 'attachment; filename="software_coverage.csv"'}
+    return StreamingResponse(iter([data]), media_type="text/csv; charset=utf-8", headers=headers)
