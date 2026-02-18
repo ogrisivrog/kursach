@@ -1,0 +1,6 @@
+﻿software_name,seats_required,seats_available,deficit,mode
+Wireshark,15,10,5,max_per_lab
+Docker,25,27,0,max_per_lab
+PostgreSQL,25,27,0,max_per_lab
+Python,25,30,0,max_per_lab
+VS Code,25,30,0,max_per_lab

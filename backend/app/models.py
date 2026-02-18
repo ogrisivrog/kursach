@@ -41,7 +41,6 @@ class Requirement(Base):
     item_name = Column(String, nullable=False, index=True)
     qty_required = Column(Integer, nullable=False, default=0)
 
-
 class SoftwareRequirement(Base):
     __tablename__ = "software_requirements"
 
