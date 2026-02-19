@@ -14,12 +14,17 @@ import os
 BASE_URL = "https://www.wildberries.ru"
 
 
+
 def get_browser():
     options = uc.ChromeOptions()
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-blink-features=automation-controlled")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    return uc.Chrome(version_main=144, options=options)
+    options.add_argument("--headless")  # убрать если нужно окно
+
+    # Указываем версию Chrome, чтобы uc скачал подходящий драйвер
+    driver = uc.Chrome(version_main=144, options=options)
+    return driver
 
 
 def apply_sorting(driver, wait, sort_type="price_asc"):
@@ -273,7 +278,7 @@ def parse_product_cards(driver, max_cards=10):
                     for selector in name_selectors:
                         name_elements = card.find_elements(By.XPATH, selector)
                         if name_elements:
-                            name_text = name_elements[0].text.strip()
+                            name_text = name_elements[0].text.strip()[2:]
                             if name_text and len(name_text) > 3:
                                 break
                     
@@ -325,40 +330,9 @@ def parse_product_cards(driver, max_cards=10):
         return products
 
 
-def save_to_json(products, search_query):
-    """
-    Сохраняет результаты в JSON файл
-    
-    Args:
-        products (list): список словарей с информацией о товарах
-        search_query (str): поисковый запрос
-    """
-    if not products:
-        print("Нет данных для сохранения в JSON")
-        return
-    
-    # Генерируем имя файла
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"wildberries_{search_query}_{timestamp}.json"
-    
-    # Подготавливаем данные для сохранения
-    data = {
-        "search_query": search_query,
-        "timestamp": datetime.now().isoformat(),
-        "total_products": len(products),
-        "products": products
-    }
-    
-    # Сохраняем в JSON
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-    
-    print(f"Результаты сохранены в JSON файл: {filename}")
-
-
 def save_to_csv(products, search_query):
     """
-    Сохраняет результаты в CSV файл
+    Сохраняет результаты в CSV файл по указанному пути
     
     Args:
         products (list): список словарей с информацией о товарах
@@ -368,15 +342,20 @@ def save_to_csv(products, search_query):
         print("Нет данных для сохранения в CSV")
         return
     
-    # Генерируем имя файла
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"wildberries_{search_query}_{timestamp}.csv"
+    # Указываем путь к файлу
+    filepath = "/Users/denis/Desktop/Рабочий стол/ВУЗ/Романчева/Kursach/data/sellers/data_sellers.csv"
+    
+    # Создаем директорию, если она не существует
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    # Очищаем файл перед записью (перезаписываем)
+    print(f"Очищаем файл {filepath} перед записью...")
     
     # Определяем заголовки
     fieldnames = ['number', 'brand', 'name', 'price', 'link']
     
-    # Сохраняем в CSV
-    with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+    # Сохраняем в CSV (режим 'w' для перезаписи/очистки)
+    with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=';')
         writer.writeheader()
         for product in products:
@@ -390,90 +369,7 @@ def save_to_csv(products, search_query):
             }
             writer.writerow(row)
     
-    print(f"Результаты сохранены в CSV файл: {filename}")
-
-
-def save_to_excel(products, search_query):
-    """
-    Сохраняет результаты в Excel файл
-    
-    Args:
-        products (list): список словарей с информацией о товарах
-        search_query (str): поисковый запрос
-    """
-    if not products:
-        print("Нет данных для сохранения в Excel")
-        return
-    
-    # Создаем DataFrame
-    df = pd.DataFrame(products)
-    
-    # Переупорядочиваем колонки
-    columns_order = ['number', 'brand', 'name', 'price', 'link']
-    df = df[columns_order]
-    
-    # Переименовываем колонки для читаемости
-    df.columns = ['№', 'Производитель', 'Название', 'Цена', 'Ссылка']
-    
-    # Генерируем имя файла
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"wildberries_{search_query}_{timestamp}.xlsx"
-    
-    # Сохраняем в Excel
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='Товары', index=False)
-        
-        # Настраиваем ширину колонок
-        worksheet = writer.sheets['Товары']
-        worksheet.column_dimensions['A'].width = 8   # №
-        worksheet.column_dimensions['B'].width = 25  # Производитель
-        worksheet.column_dimensions['C'].width = 60  # Название
-        worksheet.column_dimensions['D'].width = 15  # Цена
-        worksheet.column_dimensions['E'].width = 50  # Ссылка
-    
-    print(f"Результаты сохранены в Excel файл: {filename}")
-
-
-def save_all_formats(products, search_query):
-    """
-    Сохраняет результаты во всех форматах (JSON, CSV, Excel)
-    
-    Args:
-        products (list): список словарей с информацией о товарах
-        search_query (str): поисковый запрос
-    """
-    if not products:
-        print("Нет данных для сохранения")
-        return
-    
-    print("\n" + "="*50)
-    print("СОХРАНЕНИЕ РЕЗУЛЬТАТОВ")
-    print("="*50)
-    
-    # Создаем папку для результатов, если её нет
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    folder_name = f"results_{search_query}_{timestamp}"
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-        print(f"Создана папка: {folder_name}")
-    
-    # Сохраняем оригинальные пути
-    original_cwd = os.getcwd()
-    
-    try:
-        # Переходим в папку с результатами
-        os.chdir(folder_name)
-        
-        # Сохраняем в разных форматах
-        save_to_json(products, search_query)
-        save_to_csv(products, search_query)
-        save_to_excel(products, search_query)
-        
-        print(f"\nВсе файлы сохранены в папке: {folder_name}")
-        
-    finally:
-        # Возвращаемся в исходную папку
-        os.chdir(original_cwd)
+    print(f"Результаты сохранены в CSV файл: {filepath}")
 
 
 def parse_single_card_with_given_xpaths(driver, card_number=1):
@@ -552,7 +448,7 @@ def main():
     
     try:
         driver.get(BASE_URL)
-        time.sleep(2)
+        time.sleep(5)
 
         # --- поиск ---
         print("Выполняем поиск...")
@@ -590,8 +486,8 @@ def main():
             print(f"Цена: {product_info.get('price', 'Не указана')}")
             print(f"Ссылка: {product_info.get('link', 'Не указана')}")
         
-        # Сохраняем во всех форматах
-        save_all_formats(products, product)
+        # Сохраняем в CSV (очистка происходит внутри функции save_to_csv)
+        save_to_csv(products, product)
         
         # держим браузер открытым
         input("\nНажмите Enter для закрытия браузера...")
@@ -602,5 +498,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-#####
