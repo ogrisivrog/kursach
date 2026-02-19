@@ -3,7 +3,8 @@
 ## Что есть сейчас
 - PostgreSQL (docker)
 - FastAPI backend (docker)
-- Таблицы: `items`, `locations`, `inventory`
+- **Фронтенд** (React + Vite) — дашборд, инвентарь, требования, покрытие, отчёты, AI-записка
+- Таблицы: `items`, `locations`, `inventory`, требования, ПО
 - Импорт CSV в БД:
   - `POST /import/inventory` (загрузить файл)
   - `POST /import/inventory-from-path` (взять CSV из `./data`)
@@ -19,8 +20,15 @@ docker compose up -d --build
 ```
 
 Проверка:
-- http://localhost:8000/health
+- Бэкенд: http://localhost:8000/health
 - Swagger: http://localhost:8000/docs
+- **Фронтенд:** http://localhost:5173
+
+Локальная разработка фронтенда (без Docker):
+```bash
+cd frontend && npm install && npm run dev
+```
+Фронтенд будет доступен на http://localhost:5173 и обращается к API на http://localhost:8000 (прокси в Vite).
 
 ## Импорт CSV (вариант 1 — загрузить файл)
 Ожидаемый формат CSV:

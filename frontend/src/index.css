@@ -1,0 +1,205 @@
+:root {
+  --bg: #0f1216;
+  --bg-card: #161b22;
+  --bg-hover: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #3fb950;
+  --accent-dim: #238636;
+  --danger: #f85149;
+  --warning: #d29922;
+  --radius: 8px;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font-family: inherit;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+tr:hover td {
+  background: var(--bg-hover);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+.btn-primary {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--accent);
+}
+
+.input {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  min-width: 180px;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.badge-success { background: rgba(63, 185, 80, 0.2); color: var(--accent); }
+.badge-danger { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+.badge-warning { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+
+.loading, .error {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.error { color: var(--danger); }
+
+/* Markdown-отчёт (AI-записка) */
+.report-markdown {
+  line-height: 1.65;
+  width: 100%;
+  max-width: 88ch;
+  margin: 0 auto;
+}
+.report-markdown h1,
+.report-markdown h2,
+.report-markdown h3 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  color: var(--text);
+}
+.report-markdown h1 { font-size: 1.35rem; }
+.report-markdown h2 { font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
+.report-markdown h3 { font-size: 1.05rem; }
+.report-markdown h1:first-child,
+.report-markdown h2:first-child,
+.report-markdown h3:first-child { margin-top: 0; }
+.report-markdown p {
+  margin: 0.75em 0;
+}
+.report-markdown p:first-child { margin-top: 0; }
+.report-markdown ul,
+.report-markdown ol {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+}
+.report-markdown li {
+  margin: 0.25em 0;
+}
+.report-markdown strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.report-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.report-markdown pre {
+  margin: 1em 0;
+  padding: 1em;
+  overflow-x: auto;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.report-markdown pre code {
+  padding: 0;
+  background: none;
+  border: none;
+}
+.report-markdown blockquote {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+}
+.report-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import os
+import json
+import httpx
+from datetime import datetime
 import io
 import csv
 from pathlib import Path
 from typing import Optional, Literal
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from .normalize_software import canonicalize_software
 from sqlalchemy import text, func
@@ -17,6 +22,14 @@ from .ingest import ingest_inventory_df, ingest_software_inventory_df, ingest_so
 from .ingest_requirements import ingest_requirements_df
 
 app = FastAPI(title="MTO Minimal API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def startup():
@@ -457,3 +470,74 @@ def report_software_coverage_csv(
     data = buf.getvalue()
     headers = {"Content-Disposition": 'attachment; filename="software_coverage.csv"'}
     return StreamingResponse(iter([data]), media_type="text/csv; charset=utf-8", headers=headers)
+
+
+def _ollama_generate(prompt: str) -> str:
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+    temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
+    num_predict = int(os.getenv("OLLAMA_NUM_PREDICT", "900"))
+
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": temperature, "num_predict": num_predict},
+    }
+
+    try:
+        with httpx.Client(timeout=120) as client:
+            r = client.post(f"{base_url}/api/generate", json=payload)
+            r.raise_for_status()
+            return (r.json().get("response") or "").strip()
+    except httpx.RequestError as e:
+        raise HTTPException(502, f"Ollama connection error: {e}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Ollama HTTP error: {e.response.text[:400]}")
+
+
+@app.get("/ai/report/explain")
+def ai_report_explain(
+    mode: str = Query("max_per_lab"),
+    include_software: bool = Query(True),
+    students_factor: float = Query(1.0, ge=0.5, le=3.0),
+    db: Session = Depends(get_db),
+):
+    eq = calc_coverage(only_deficit=False, mode=mode, db=db)
+
+    sw = None
+    if include_software:
+        sw = calc_software_coverage(only_deficit=False, mode=mode, db=db)
+
+    payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "mode": mode,
+        "students_factor": students_factor,
+        "equipment": eq,
+        "software": sw,
+        "rules": {
+            "mode=max_per_lab": "по каждой лаборатории берём MAX по дисциплинам, затем суммируем по лабораториям",
+            "mode=sum": "суммируем требования по всем дисциплинам (часто завышает)",
+        },
+        "constraints": [
+            "Не придумывай новые числа и позиции. Используй только данные из JSON.",
+            "Если данных недостаточно — так и скажи и предложи, что добавить.",
+            "В ТОП-5 дефицитов включай только строки, где deficit > 0."
+        ],
+    }
+
+    prompt = (
+        "Ты — ИИ-агент МТО вуза. Сформируй 'пояснительную записку' по обеспеченности.\n"
+        "Структура:\n"
+        "1) Краткая сводка\n"
+        "2) ТОП-5 критичных дефицитов (ТОЛЬКО где deficit > 0) (почему критично и влияние на учебный процесс)\n"
+        "3) Обоснование режима расчёта (mode)\n"
+        "4) What-if: если students_factor != 1 — что изменится (в общих словах, без новых чисел)\n"
+        "5) Рекомендации (что делать)\n"
+        "6) Ограничения данных/риски (почему возможны ложные дефициты)\n\n"
+        "Данные (JSON):\n"
+        f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
+    )
+
+    report_text = _ollama_generate(prompt)
+    return {"ok": True, "report": report_text, "data_used": payload}
