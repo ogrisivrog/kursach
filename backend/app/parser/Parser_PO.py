@@ -126,7 +126,7 @@ def parse_reestr_po(software_names, max_items=10):
     print(f"Итого: {len(json_results)} записей, возвращаю список JSON-строк.")
     return json_results
 
+
 software_names = ["Cisco", "Oracle"]
 max_items = 3
-
 print(parse_reestr_po(software_names, max_items))
