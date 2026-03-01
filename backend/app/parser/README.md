@@ -1,6 +1,28 @@
-Parser placeholder.
+## Парсер МСТУГА (оснащённость)
 
-Later we will add:
-- download table from university site (HTML/PDF)
-- parse to DataFrame
-- normalize to inventory CSV format (item_name, location, qty_available)
+При старте бэкенда автоматически:
+- скачивает HTML со страницы МСТУГА (таблица “Оснащенность”)
+- парсит таблицы в DataFrame
+- режет поле оснащённости на позиции
+- нормализует названия (через `data/processed/synonyms.csv` + правила)
+- сохраняет CSV (пока **нигде не используется** системой)
+
+### Выходной файл
+По умолчанию сохраняется в:
+- `/app/data/processed/mstuca_items2_normalized.csv` (в Docker)
+- то есть на хосте: `./data/processed/mstuca_items2_normalized.csv`
+
+Колонки:
+- `item_name`, `location`, `qty_available`
+- `canonical_item_name` (нормализованное название)
+- `search_query` (пока равно `canonical_item_name`)
+
+### Управление через env
+- `MTSUCA_PARSE_ON_STARTUP`: `1`/`0` (по умолчанию `1`)
+- `MTSUCA_URL`: URL страницы (по умолчанию встроенный)
+- `MTSUCA_OUT`: путь к выходному CSV (по умолчанию `/app/data/processed/mstuca_items2_normalized.csv`)
+- `MTSUCA_KEEP_CAPACITY`: `1`/`0` (по умолчанию `0`) — сохранять строки про “мест/рабочих мест”
+
+### Политика обновления
+По умолчанию парсер **не перегенерирует** файл при каждом запуске — он запускается только если `MTSUCA_OUT` ещё не существует.
+В коде оставлена заглушка-комментарий для переключения на обновление **раз в неделю** по времени модификации файла.

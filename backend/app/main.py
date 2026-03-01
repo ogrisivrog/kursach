@@ -20,6 +20,7 @@ from .db import engine, get_db
 from .models import Base, Item, Location, Inventory, Requirement, SoftwareInventory, SoftwareRequirement
 from .ingest import ingest_inventory_df, ingest_software_inventory_df, ingest_software_requirements_df
 from .ingest_requirements import ingest_requirements_df
+from .parser.mstuca import parse_on_startup
 
 app = FastAPI(title="MTO Minimal API")
 
@@ -35,6 +36,9 @@ app.add_middleware(
 def startup():
     # Пока создаём таблицы автоматически (позже заменим на миграции)
     Base.metadata.create_all(bind=engine)
+    # Парсинг и нормализация таблицы оснащённости МГТУ ГА (в файл CSV).
+    # Файл сохраняется в /app/data/processed и пока не используется системой.
+    parse_on_startup()
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
